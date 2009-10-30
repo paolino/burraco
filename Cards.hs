@@ -9,39 +9,18 @@ import Control.Monad.State
 type Rank = Int
 type Suite = Int
 
-data Card = Card {
-	rank :: Rank,
-	suite :: Suite
-	}
+data Card 
+	= Card Rank Suite
 	| Jolly deriving (Eq,Ord,Show)
+
+rank Jolly = -20
+rank (Card r _) = r
+
+suite Jolly = -20
+suite (Card _ s) = s
 
 mkCard :: (Int, Int) -> Card
 mkCard = uncurry Card
-{-
-pinella :: Card -> Bool
-pinella (Card 2 _) = True
-pinella Jolly = True
-pinella _ = False
-
-data Hand = Hand {cards :: [Card]} deriving Show
-
-mkHand :: [Card] -> Hand
-mkHand =  Hand . sort
-
-type Game = [Card]
-
-games :: Hand -> [Game]
-games = liftA2 (++) scalaGames trisGames
-
-trisGames :: Hand -> [Game]
-trisGames = groupBy ((==) `on` rank) . cards
-
-scalaGames :: Hand -> [Game]
-scalaGames = undefined
-
-desuite :: Hand -> [Hand]
-desuite = map  mkHand . groupBy ((==) `on` suite) . sortBy (compare `on` suite) . cards
--}
 
 data PSA = Piazzato Rank Bool  | Spiazzato Bool | Assente
 data Game 
@@ -95,9 +74,9 @@ attach (Scala s (Spiazzato t) (r0,r1)) c@(Card r' s') h
 		Just (n,_) -> Scala s (Piazzato n t) (r0, r')
 	| otherwise = []
 
-attach (Scala s SPiazzato (r0,r1)) Jolly h = []
+attach (Scala s (SPiazzato _) (r0,r1)) Jolly h = []
 
-attach (Scala s Assente (r0,r1)) Jolly h = [(Scala s Spiazzato (r0,r1), h)]
+attach (Scala s Assente (r0,r1)) Jolly h = [(Scala s (Spiazzato False) (r0,r1), h)]
 
 attach (Scala s Assente (r0,r1))  c@(Card r' s') h
 	| s /= s' && r' == 2 = [(Scala s (Spiazzato False) (r0,r1), h)]
@@ -110,14 +89,28 @@ attach (Scala s Assente (r0,r1))  c@(Card r' s') h
 		Just (n,t) -> Scala s (Piazzato n t) (r0,r')
 	| otherwise = []
 
+
 attach Tavolo Jolly h = []
-attach Tavolo c@(Card r' s') h 
+attach Tavolo c@(Card r' s') (Hand cs) 
 	| r' == 2 = []
-	| otherwise = let
-		cs = sameRank h
-
-
-
+	| otherwise = let scs = filter (\x -> suite x == s) cs in
+		concat [	
+		do
+			r1 <- nub $ filter (\x -> rank x == r') cs
+			let cs1 = delete r1 cs
+			r2 <- nub $ filter (\x -> rank x `elem` [-20,2,r']) cs1
+			return (Tris r' False, Hand $ delete r2 cs1) 
+		, do 	
+			r1 <- maybeToList $ find (\x -> rank x = r'- 2) scs
+			
+		]
+			
+		hs = pick h
+		
+pick :: (Card -> Bool) -> Hand -> [Hand
+pick cond (Hand cs) = case find cond cs of
+	Just r ->  let h = Hand $ delete r cs in tell [h] >> pick cond h
+	Nothing -> return ()
 		
 
 	| r == 2 && lenght cs < 13 = \h -> [(Scala su (c:cs),h)]
