@@ -4,6 +4,7 @@ import Data.Function (on)
 import System.Random
 import Data.List (sortBy)
 import Control.Monad.State
+import Control.Arrow (second)
 import Enumeration
 import Common
 import System.Environment
@@ -27,4 +28,6 @@ runT f = evalStateT f deck
 main = do
 	r:_ <- getArgs
 	h <- runT $ handT (read r)
-	mapM_ print $ sortBy (compare `on` (length . fst)) $ nubOrd $ sviluppo0 h [Tavolo, Scarto (Right [])]
+
+	mapM_ print $ sortBy (compare `on` (length . fst)) $ nubOrd $ sviluppo0 h [Right Tavolo, Right $ Scarto []]
+

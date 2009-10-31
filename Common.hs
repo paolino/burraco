@@ -24,10 +24,10 @@ data Game
 		gmatta :: PSA,
 		gbirank :: (Rank,Rank)
 		}
-	| Tavolo 
-	| Scarto (Either [Card] [Card]) deriving (Eq,Show,Ord)
+	| Tavolo
+	| Scarto [Card] deriving (Eq,Ord,Show)
 
-type Board = [Game]
+type Board = [Either Game Game]
 rank = fst
 suite = snd
 jolly = (-20,-20)
