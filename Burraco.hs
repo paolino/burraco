@@ -1,4 +1,4 @@
-{-# LANGUAGE NoMonomorphismRestriction, MultiParamTypeClasses, TypeSynonymInstances #-}
+{-# LANGUAGE NoMonomorphismRestriction, MultiParamTypeClasses, GeneralizedNewtypeDeriving, TypeSynonymInstances #-}
 module Burraco where
 
 import Control.Arrow (first)
@@ -6,41 +6,77 @@ import Data.List (delete, groupBy, sortBy, find)
 import Data.Function (on)
 import Control.Monad (liftM2)
 import Data.Either (lefts)
+import Data.Char (chr)
 import Enumeration
+import Debug.Trace
 
-type Rank = Int
-type Suite = Int
+newtype Rank = Rank Int deriving (Read,Ord,Eq,Num, Enum)
+unRank (Rank x) = x
 
-type Card = (Rank, Suite)
+
+newtype Suite = Suite Int deriving (Read,Ord,Eq)
+instance Show Suite where
+	show (Suite y) 
+		| y == 0 = "C"
+		| y == 1 = "Q"
+		| y == 2 = "F"
+		| y == 3 = "P"
+unSuite (Suite x) = x
+
+
+newtype Card = Card (Rank, Suite) deriving (Read,Eq, Ord)
+unCard (Card x) = x
+
+instance Show Card where
+	show (Card (x,y)) 
+		| x == -20 = "Jolly"
+		| otherwise = show x ++ show y
+
+instance Show Rank where
+	show (Rank x) 
+		| x == 1 = "A"
+		| x == 13 = "K"
+		| x == 12 = "Q"
+		| x == 11 = "J"
+		| x == 14 = "A"
+		| otherwise = show $ x
+{- 
+instance Read Card where
+	readsPrec _ "Jolly" = [(Card (-20,-20),"")]
+	readsPrec _ (r:s:"") 
+		| s == "C" = [Card (
+-}
 type Hand = [Card]
 
-data PSA = Piazzato Rank Bool  | Spiazzato Bool | Assente deriving (Show,Eq,Ord)
+data PSA = Piazzato Rank Bool  | Spiazzato Bool | Assente deriving (Show,Eq,Ord,Read)
 data Game 
-	= Tris {
-		grank :: Rank,
-		gjolly :: Bool
-		}
-	| Scala {
-		gsuite :: Suite,
-		gmatta :: PSA,
-		gbirank :: (Rank,Rank)
-		}
+	= Tris 
+		Rank
+		Bool
+		
+	| Scala 
+		Suite
+		PSA
+		(Rank,Rank)
+		
 	| Tavolo
-	| Scarto [Card] deriving (Eq,Ord,Show)
+	| Scarto [Card] deriving (Eq,Ord,Show,Read)
 
 
 isScarto (Scarto _) = True
 isScarto _ = False
 
-rank = fst
-suite = snd
-jolly = (-20,-20)
+suite =  snd . unCard
+jolly = Card (-20,Suite (-20))
 
 isJP = liftM2 (||) (ranked 2) (ranked (-20))
 
 
-ranked n = (==) n . fst
-suited s = (==) s . snd
+ranked n = (==) n . fst . unCard
+rankedWA n = ranked $ case n of 
+	Rank 14 ->  Rank 1
+	x -> x
+suited s = (==) s . suite
 
 
 nubOrdBy f = map head . groupBy ((==) `on` f) . sortBy (compare `on` f)
@@ -48,101 +84,94 @@ nubOrd = nubOrdBy id
 
 x &.& y = liftM2 (&&) x y
 
-handleAce x 
-	| x == 1 = 14
-	| otherwise = x
-
-rankedHandleAce n  = ranked n . first handleAce 
-
+subst h x = return . R $ (x,h)
+nochance = []
 instance CG Game Card where
-
-	-- attaccare ad un tris
-	attach t@(Tris ra j) c@(r, _) h
-		| r == ra = [R (t,h)] -- same rank
-		| (r == 2 || r == -20) && not j = [R (Tris ra True,h)] -- a jolly/pinella 
-		| otherwise = []
-
-	-- attaccare ad una scala con jolly o pinella all'interno
-	attach (Scala s (Piazzato r t) (r0,r1)) c@(r', s') h 
-		| s /= s' = [] 
-		| r == r' && not t = [R (Scala s (Spiazzato t) (r0,r1), h)] -- spiazza il jp che e' di seme diverso
-		| r == r' && t && r0 == 3 = [R (Scala s Assente (2,r1), h)] -- la pinella va a finire nel 2  
-		| r == r' = [R (Scala s (Spiazzato t) (r0,r1), h)] -- la pinella ha lo stesso seme ma non finisce nel 2
-		| r' < r0 = let k None = Scala s (Piazzato r t) (r',r1)
-			in map (R .first k) . nubOrdBy snd $ picks 0  (map ranked [r' + 1 .. r0 - 1]) (None,h)
-		| handleAce r' > r1 = let k None = Scala s (Piazzato r t) (r0, handleAce r') 
-			in map (R . first k) . nubOrdBy snd $ picks 0 (map ranked [r1 + 1 .. handleAce r' - 1]) (None,h)
-		| otherwise = []
-
-	-- attaccare ad una scala con jolly o pinella all'esterno
-	attach (Scala s (Spiazzato t) (r0,r1)) c@(r', s') h 
-		| s /= s' = [] 
-		| r' < r0 = let 	
-			k (Placed n _) = if t && n == 2 then
-				Scala s Assente (r', r1)  -- opla la pinella diventa un 2
-				else Scala s (Piazzato n t) (r', r1) -- il jolly o pinella viene piazzato
-			k (Given _) = if t && r' == 3 then
-				Scala s Assente (2,r1) else 	-- opla la pinnella diventa un 2
-				Scala s (Spiazzato t) (r', r1) -- il jolly o pinella che sia rimane spiazzato
-			in map (R . first k) . nubOrdBy snd $ picks r' (map ranked [r' + 1 .. r0 - 1]) (Given undefined, h)
-		| handleAce r' > r1 = let  
-			k (Placed n _) = Scala s (Piazzato n t) (r0, handleAce r') -- il jolly o pinella viene piazzato
-			k (Given _) = Scala s (Spiazzato t) (r0, handleAce r') -- il jolly o pinella che sia rimane spiazzato
-			in map (R . first k) . nubOrdBy snd  $ picks (r1 + 1) (map ranked [r1 + 1 .. handleAce r' - 1]) (Given undefined, h)
-		| otherwise = []
-
-	-- attaccare ad una scala che non contiene jolly o pinelle
-	attach (Scala s Assente (r0,r1))  c@(r', s') h
-		| s /= s' && isJP c = [R (Scala s (Spiazzato False) (r0,r1), h)]
-		| s /= s' = []
-		| r' < r0 = let  
-			k (Internal _) = Scala s Assente (r',r1)
-			k (Placed n c) = Scala s (Piazzato n (suite c == s)) (r',r1)
-			in map (R . first k) . nubOrdBy snd $ picks r' (map ranked [r' + 1.. r0 - 1]) (Internal isJP,h)
-		| r' > r1 = let 
-			k (Internal _) = Scala s Assente (r0,handleAce r')
-			k (Placed n c) = Scala s (Piazzato n (suite c == s)) (r0, handleAce r')
-			in map (R . first k) . nubOrdBy snd $ picks (r1 + 1) (map ranked [r1 + 1 .. handleAce r' - 1]) (Internal isJP,h)
-		| otherwise = []
-
-	-- attaccare al tavolo ovvero calare una figura nuova
-	attach Tavolo c@(r, s) h 
-		| isJP c = []
-		| otherwise = concat $  [t,s0 r ,s1 r ,s2 r]where
-			t = let 
-				k (Placed _ _) = Tris r True
-				k (Internal _) = Tris r False
-				in map (N . first k) . nubOrdBy snd $ picks 0 (replicate 2 $ ranked r) (Internal isJP, h)
-			s0 r' 
-				| (r' > 2  || r' == 1) = let 
-					r = if r' == 1 then 14 else r' 
-					k (Placed n c) = let 
-						t = suite c == s
-						q = if n == r - 2 then Spiazzato t else Piazzato n t
-						in Scala s q (r - 2, r)
-					k (Internal _) = Scala s Assente (r - 2,r) 
-					in map (N . first k) . nubOrdBy snd $ picks (r - 2)
-						[ranked (r -2) &.& suited s, ranked (r - 1) &.& suited s] (Internal isJP, h)
-				| otherwise = []
-			s1 r 
-				| r > 1 = let
-					k (Placed n c) = Scala s (Spiazzato $ suite c == s) (r -1 , r + 1)
-					k (Internal _) = Scala s Assente (r - 1,r + 1) 
-					in map (N . first k) . nubOrdBy snd $ picks (r - 1)
-						[ranked (r - 1) &.& suited s, rankedHandleAce (r + 1) &.& suited s] (Internal isJP, h)
-				| otherwise = []
-			s2 r 
-				| r < 13 = let
-					k (Placed n c) = let 
-						t = suite c == s
-						q = if n == r + 2 then Spiazzato t else Piazzato n t
-						in Scala s q (r, r + 2)
-					k (Internal _) = Scala s Assente (r, r + 2) 
-					in map (N . first k) . nubOrdBy snd $ picks r
-						[ranked (r + 1) &.& suited s, rankedHandleAce (r + 2) &.& suited s] (Internal isJP, h)
-				| otherwise = []
-
 	attach (Scarto cs) c h = [E (Scarto $ c:cs ,h)]
+	attach g (Card (r,s)) h = attach' g (Card (r,s)) h ++ case r of
+		1 -> attach' g (Card (14,s)) h
+		_ -> nochance
 
-	exit  = maybe False (const True) . find isScarto . lefts 
+		where
+		-- attaccare ad un tris
+		attach' t@(Tris ra j) c@(Card (r, _)) h
+			| r == ra = subst h t -- same rank
+			| (r == 2 || r == -20) && not j = subst h $ Tris ra True -- a jolly/pinella 
+			| otherwise = nochance
+
+		-- attaccare ad una scala con jolly o pinella all'interno
+		attach' (Scala s (Piazzato r t) (r0,r1)) c@(Card (r', s')) h 
+			| s /= s' = nochance 
+			| r == r' && t && r0 == Rank 3 = subst h $ Scala s Assente (Rank 2,r1)-- la pinella va a finire nel 2  
+			| r == r' = subst h $ Scala s (Spiazzato t) (r0,r1) -- la pinella ha lo stesso seme ma non finisce nel 2
+			| r' == r0 - Rank 1 = subst h $ Scala s (Piazzato r t) (r',r1)
+			| r' == r1 + Rank 1 = subst h $ Scala s (Piazzato r t) (r0,  r')
+			| otherwise = nochance
+
+		-- attaccare ad una scala con jolly o pinella all'esterno
+		attach' (Scala s (Spiazzato t) (r0,r1)) c@(Card (r', s')) h 
+			| s /= s' = nochance 
+			| r' == r0 - Rank 1 = subst h $ Scala s (Spiazzato t) (r',r1)
+			| r' == r0 - Rank 2 = subst h $ Scala s (Piazzato (r0 - Rank 1) t) (r',r1)
+			| r' == r1 + Rank 1 = subst h $ Scala s (Spiazzato t) (r0, r') 
+			| r' == r1 + Rank 2 = subst h $ Scala s (Piazzato (r0 + Rank 1) t) (r', r1)
+			| otherwise = nochance
+
+		-- attaccare ad una scala che non contiene jolly o pinelle
+		attach' (Scala s Assente (r0,r1))  c@(Card (r', s')) h
+			| s /= s' && isJP c = subst h $ Scala s (Spiazzato False) (r0,r1)
+			| s /= s' = nochance
+			| r' == r0 - Rank 1 = subst h $ Scala s Assente (r',r1)  
+			| r' == r1 + Rank 1 = subst h $ Scala s Assente (r0, r') 
+			| otherwise = nochance
+
+		-- attaccare al tavolo ovvero calare una figura nuova
+		attach' Tavolo c@(Card (r, s)) h 
+			| isJP c = nochance
+			| otherwise = let 
+				block k = map (N . first k) . nubOrdBy snd
+				checks s = zipWith (&.&) (repeat $ suited s) 
+				t = let 	k (Right _) = Tris r True
+						k _ = Tris r False
+						in block k  $ picks (Rank 0) (replicate 2 $ ranked r) (Left isJP, h)
+				s0 r	| r > Rank 2 = let 	
+						k (Right (n,c)) = let 
+							t = suite  c == s
+							in uncurry (Scala s) $ case n == r - Rank 2 of
+								True -> (Spiazzato t, (r - Rank 1, r))
+								_  -> (Piazzato n t, (r - Rank 2, r))
+						k _ = Scala s Assente (r - Rank 2,r) 
+						in block k $ picks (r - Rank 2) (checks s [ranked (r - Rank 2), ranked (r - Rank 1)]) (Left isJP, h)
+					| otherwise = nochance
+				s1 r 	| (r >  Rank 1 && r <  Rank 14) = let
+						k (Right  (n,c)) = Scala s (Spiazzato $ suite c == s) $ case n == r - Rank  1 of
+							True -> (r , r +  Rank 1)
+							_ -> (r -  Rank 1, r)
+						k _ = Scala s Assente (r -  Rank 1,r +  Rank 1) 
+						in block k $ picks (r -  Rank 1) (checks s [ ranked (r -  Rank 1), rankedWA (r +  Rank 1)]) (Left isJP, h)
+					| otherwise = nochance
+				s2 r 	| r <  Rank 13 = let
+						k (Right (n,c)) = let 
+							t = suite c == s
+							in uncurry (Scala s) $ case n == r +  Rank 2 of
+								True  -> (Spiazzato t, (r, r +  Rank 1))
+								_ -> (Piazzato n t, (r, r +  Rank 2))
+						k _ = Scala s Assente (r, r +  Rank 2) 
+						in block k  $ picks (r +  Rank 1) (checks s [ranked (r +  Rank 1) , rankedWA (r +  Rank 2)])  (Left isJP, h)
+					| otherwise = nochance
+				in concat [t,s0 r ,s1 r ,s2 r] 
+
+type Jolly a = Either (a -> Bool) (Rank, a) -- deriving (Eq,Ord)
+
+pick :: Eq a => ((a -> Bool), Rank) -> (Jolly a,[a]) -> [(Jolly a,[a])]
+pick (k,i) (j,cs) = concat [
+		[(j, delete c cs) | c <- filter k cs],
+		case j of 
+			Left k' -> [(Right (i, c), delete c cs) | c <- filter k' cs]
+			_ -> []
+		]
+
+-- potrebbe essere necessario reversare le condizioni o usare foldl -------------
+picks :: Eq a => Rank -> [a -> Bool] -> (Jolly a,[a]) -> [(Jolly a,[a])]
+picks i ks jcs = foldr (concatMap . pick) [jcs] $ zip ks [i..]
 
