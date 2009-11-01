@@ -48,25 +48,6 @@ nubOrd = nubOrdBy id
 
 x &.& y = liftM2 (&&) x y
 
-
-
-type Index = Int
-data Jolly a = None | Given a | Internal (a -> Bool) | Placed Index a -- deriving (Eq,Ord)
-
-pick :: Eq a => ((a -> Bool), Index) -> (Jolly a,[a]) -> [(Jolly a,[a])]
-pick (k,i) (j,cs) = concat [
-		[(j, delete c cs) | c <- filter k cs],
-		case j of 
-			Given c -> [(Placed i c ,cs)]
-			Internal k' -> [(Placed i c, delete c cs) | c <- filter k' cs]
-			_ -> []
-		]
-
--- potrebbe essere necessario reversare le condizioni o usare foldl -------------
-play :: Eq a => Int -> [a -> Bool] -> (Jolly a,[a]) -> [(Jolly a,[a])]
-play i ks jcs = foldr (concatMap . pick) [jcs] $ zip ks [i..]
-
-
 handleAce x 
 	| x == 1 = 14
 	| otherwise = x
@@ -88,9 +69,9 @@ instance CG Game Card where
 		| r == r' && t && r0 == 3 = [R (Scala s Assente (2,r1), h)] -- la pinella va a finire nel 2  
 		| r == r' = [R (Scala s (Spiazzato t) (r0,r1), h)] -- la pinella ha lo stesso seme ma non finisce nel 2
 		| r' < r0 = let k None = Scala s (Piazzato r t) (r',r1)
-			in map (R .first k) . nubOrdBy snd $ play 0  (map ranked [r' + 1 .. r0 - 1]) (None,h)
+			in map (R .first k) . nubOrdBy snd $ picks 0  (map ranked [r' + 1 .. r0 - 1]) (None,h)
 		| handleAce r' > r1 = let k None = Scala s (Piazzato r t) (r0, handleAce r') 
-			in map (R . first k) . nubOrdBy snd $ play 0 (map ranked [r1 + 1 .. handleAce r' - 1]) (None,h)
+			in map (R . first k) . nubOrdBy snd $ picks 0 (map ranked [r1 + 1 .. handleAce r' - 1]) (None,h)
 		| otherwise = []
 
 	-- attaccare ad una scala con jolly o pinella all'esterno
@@ -103,11 +84,11 @@ instance CG Game Card where
 			k (Given _) = if t && r' == 3 then
 				Scala s Assente (2,r1) else 	-- opla la pinnella diventa un 2
 				Scala s (Spiazzato t) (r', r1) -- il jolly o pinella che sia rimane spiazzato
-			in map (R . first k) . nubOrdBy snd $ play r' (map ranked [r' + 1 .. r0 - 1]) (Given undefined, h)
+			in map (R . first k) . nubOrdBy snd $ picks r' (map ranked [r' + 1 .. r0 - 1]) (Given undefined, h)
 		| handleAce r' > r1 = let  
 			k (Placed n _) = Scala s (Piazzato n t) (r0, handleAce r') -- il jolly o pinella viene piazzato
 			k (Given _) = Scala s (Spiazzato t) (r0, handleAce r') -- il jolly o pinella che sia rimane spiazzato
-			in map (R . first k) . nubOrdBy snd  $ play (r1 + 1) (map ranked [r1 + 1 .. handleAce r' - 1]) (Given undefined, h)
+			in map (R . first k) . nubOrdBy snd  $ picks (r1 + 1) (map ranked [r1 + 1 .. handleAce r' - 1]) (Given undefined, h)
 		| otherwise = []
 
 	-- attaccare ad una scala che non contiene jolly o pinelle
@@ -117,11 +98,11 @@ instance CG Game Card where
 		| r' < r0 = let  
 			k (Internal _) = Scala s Assente (r',r1)
 			k (Placed n c) = Scala s (Piazzato n (suite c == s)) (r',r1)
-			in map (R . first k) . nubOrdBy snd $ play r' (map ranked [r' + 1.. r0 - 1]) (Internal isJP,h)
+			in map (R . first k) . nubOrdBy snd $ picks r' (map ranked [r' + 1.. r0 - 1]) (Internal isJP,h)
 		| r' > r1 = let 
 			k (Internal _) = Scala s Assente (r0,handleAce r')
 			k (Placed n c) = Scala s (Piazzato n (suite c == s)) (r0, handleAce r')
-			in map (R . first k) . nubOrdBy snd $ play (r1 + 1) (map ranked [r1 + 1 .. handleAce r' - 1]) (Internal isJP,h)
+			in map (R . first k) . nubOrdBy snd $ picks (r1 + 1) (map ranked [r1 + 1 .. handleAce r' - 1]) (Internal isJP,h)
 		| otherwise = []
 
 	-- attaccare al tavolo ovvero calare una figura nuova
@@ -131,7 +112,7 @@ instance CG Game Card where
 			t = let 
 				k (Placed _ _) = Tris r True
 				k (Internal _) = Tris r False
-				in map (N . first k) . nubOrdBy snd $ play 0 (replicate 2 $ ranked r) (Internal isJP, h)
+				in map (N . first k) . nubOrdBy snd $ picks 0 (replicate 2 $ ranked r) (Internal isJP, h)
 			s0 r' 
 				| (r' > 2  || r' == 1) = let 
 					r = if r' == 1 then 14 else r' 
@@ -140,14 +121,14 @@ instance CG Game Card where
 						q = if n == r - 2 then Spiazzato t else Piazzato n t
 						in Scala s q (r - 2, r)
 					k (Internal _) = Scala s Assente (r - 2,r) 
-					in map (N . first k) . nubOrdBy snd $ play (r - 2)
+					in map (N . first k) . nubOrdBy snd $ picks (r - 2)
 						[ranked (r -2) &.& suited s, ranked (r - 1) &.& suited s] (Internal isJP, h)
 				| otherwise = []
 			s1 r 
 				| r > 1 = let
 					k (Placed n c) = Scala s (Spiazzato $ suite c == s) (r -1 , r + 1)
 					k (Internal _) = Scala s Assente (r - 1,r + 1) 
-					in map (N . first k) . nubOrdBy snd $ play (r - 1)
+					in map (N . first k) . nubOrdBy snd $ picks (r - 1)
 						[ranked (r - 1) &.& suited s, rankedHandleAce (r + 1) &.& suited s] (Internal isJP, h)
 				| otherwise = []
 			s2 r 
@@ -157,7 +138,7 @@ instance CG Game Card where
 						q = if n == r + 2 then Spiazzato t else Piazzato n t
 						in Scala s q (r, r + 2)
 					k (Internal _) = Scala s Assente (r, r + 2) 
-					in map (N . first k) . nubOrdBy snd $ play r
+					in map (N . first k) . nubOrdBy snd $ picks r
 						[ranked (r + 1) &.& suited s, rankedHandleAce (r + 2) &.& suited s] (Internal isJP, h)
 				| otherwise = []
 

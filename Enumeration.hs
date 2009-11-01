@@ -5,7 +5,10 @@ module Enumeration (
 	Result (..),
 	Board,
 	Node,
-	solutions
+	Index,
+	Jolly (..),
+	solutions,
+	picks
 	)
 	where
 
@@ -49,4 +52,20 @@ solutions :: CG g c => Node g c -> [Node g c]
 solutions x = snd . flip evalState [x] . runWriterT $ forever sviluppo 
 		
 
+
+type Index = Int
+data Jolly a = None | Given a | Internal (a -> Bool) | Placed Index a -- deriving (Eq,Ord)
+
+pick :: Eq a => ((a -> Bool), Index) -> (Jolly a,[a]) -> [(Jolly a,[a])]
+pick (k,i) (j,cs) = concat [
+		[(j, delete c cs) | c <- filter k cs],
+		case j of 
+			Given c -> [(Placed i c ,cs)]
+			Internal k' -> [(Placed i c, delete c cs) | c <- filter k' cs]
+			_ -> []
+		]
+
+-- potrebbe essere necessario reversare le condizioni o usare foldl -------------
+picks :: Eq a => Int -> [a -> Bool] -> (Jolly a,[a]) -> [(Jolly a,[a])]
+picks i ks jcs = foldr (concatMap . pick) [jcs] $ zip ks [i..]
 
