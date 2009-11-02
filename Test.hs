@@ -28,8 +28,10 @@ main = do
 	r:_ <- getArgs
 	h0 <- runT $ handT (read r) 
 	print h0
-	mapM_ print $ solutions (h0,[Tavolo, Scarto []])
-
--- h0 = [(3,0),(4,0),(5,0),(3,1),(4,1),(5,1),(3,2)]	
---	let 	h0 = map (Card . (Rank *** Suite)) $ read h :: Hand
---		b0 = read b :: [Game]
+	mapM_ print . map (second $ map env) $ solutions (h0,[GState [] Tavolo, GState [] Scarto ])
+{-
+main' = do
+	h:_ <- getArgs
+	let 	h0 = map (Card . (Rank *** Suite)) $ read h :: Hand
+	mapM_ print . map (second $ map game) . snd . run (sviluppo) $ (h0,[GState [] Tavolo, GState [] Scarto ])
+-}
