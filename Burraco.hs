@@ -92,7 +92,7 @@ isJP = liftM2 (||) (ranked 2) (ranked (-20))
 nochance :: [Result (Hand, GState Combination [Card])]
 nochance = []
 
--- | l'istanza a GC ci permette di sviluppare le mosse attraverso Enumeration.solutions
+-- | l'istanza a CG ci permette di sviluppare le mosse attraverso Enumeration.solutions, come environment delle combinazioni , mettiamo le carte che contengono. Da notare che questa informazione non ha alcun valore per lo sviluppo delle mosse, ma potrebbe servire a comunicare e a valutare lo stato del gioco. La lista di carte contenute non e' inserita direttamente nei giochi anche per non appesantire il confronto tra i nodi nella ricerca e semplificazione di simmetrie.
 instance CG Combination Card [Card] where
 	-- attaccare una carta al monte degli scarti, il valore di uscita e' un E segnalando la fine del ramo
 	attach (GState cs Scarto) c h = [E (h, GState (c:cs) Scarto )]
@@ -114,11 +114,10 @@ instance CG Combination Card [Card] where
 				-- carta data. Quindi ce ne usciamo con degli N che infatti sono da inserire nel tavolo di partenza
 				-- Da notare che non essendoci le condizioni di uscita delle strade (Result in E) che avvengono solo per gli
 				-- scarti, ci tocca intercettare i nodi incompiuti (snd . run) infatti quelli compiuti sono vuoti (fst . run)
-				-- Qui e' l'apoteosi della lazyness, infatti attach e run sono mutualmente ricorsive (vedi Enumeration.core)
+				-- Qui e' l'apoteosi della lazyness, infatti attach e sviluppo sono mutualmente ricorsive (vedi Enumeration.core)
 				-- inoltre solo con le typeclass si evita il loop tra i moduli
-				sanes = map N . filter ((== 3). length . env . snd) . map (second head) 
-				runtwo b =  snd . run (sviluppo >> sviluppo) $ (h,[b])
-				in concatMap (sanes . runtwo . GState [c]) [Tris r False, Scala s Assente (r,r)]-- ,s0 r ,s1 r ,s2 r] 
+				runtwo b =  map (N . second head) . snd . run (sviluppo >> sviluppo) $ (h,[b])
+				in concatMap (runtwo . GState [c]) [Tris r False, Scala s Assente (r,r)]-- ,s0 r ,s1 r ,s2 r] 
 		-- i casi restanti sono tutti potenziali rimpiazzamenti di un gioco esistente, li wrappiamo per semplificarne la scrittura
 		attach' (GState cs g) c h = case attach'' g c of
 			Nothing -> nochance
