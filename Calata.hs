@@ -37,5 +37,5 @@ simpleEI d g = fromIntegral (size $ intersection d g) / (fromIntegral (size g) *
 main = do
 	h <- fromList `fmap` runT (handT 11)
 	print h
-	mapM_ print . take 20 $ bests simpleEI h 
+	mapM_ print . take 20 $ bests simpleEI  h 
 		
