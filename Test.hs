@@ -12,18 +12,6 @@ import Burraco
 
 ----------------- tests -------------------------------
 
-deck :: [Card]
-deck = concat . replicate 2 $ [Card (i,Suite j) | i <- [1..13] , j <- [0..3]] ++ replicate 4 jolly
-
-pickT = do
-	rs <- get
-	n <- (`mod` length rs) `fmap` lift randomIO
-	put $ take n rs ++ drop (n + 1) rs
-	return $ rs !! n
-
-handT n  = replicateM n pickT
-
-runT f = evalStateT f deck
 main = do
 	r:_ <- getArgs
 	h0 <- runT $ handT (read r) 
