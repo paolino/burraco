@@ -49,13 +49,13 @@ scale = map (ap (flip fromList) length)$ do
 	j <- [0 .. 3]
 	n <- [1 .. 13]
 	x <- [1 .. 14 - n]
-	return . map (Card . flip (,) j) $ [x .. x + n] 
+	return . map (flip mkCard j) $ [x .. x + n] 
 		
 trisses = let 	f j = concatMap $ \x -> [x] ++  if j `elem` x then [j:x] else []
 	in map (ap (flip fromList) length) $ do
-		n <- [1 .. 13]
+		n <- [1] ++ [3 .. 13]
 		x<- foldr f (tail . powerset $ [0 .. 3]) [0..3]
-		return . map (Card . (,) n) $ x
+		return . map (mkCard n) $ x
 
 
 giochi :: [Gioco]
@@ -79,7 +79,7 @@ type Q =  Gioco -> [Intersezione] -> Float
 classifica :: Q -> [(Gioco,[Intersezione])] -> [(Gioco,Float)]
 classifica q = sortBy (flip $ comparing snd) . parMap rnf  (fst &&& uncurry q) 
 
-simpleQ k g = sum . map (\i -> fromIntegral (size i) / (fromIntegral (size g) ** (k :: Float)))
+simpleQ k g = (* (fromIntegral (size g) ** (-k))) . fromIntegral . sum . map size 
 
 type R = Dotazione -> Gioco -> Maybe Gioco
 simpleR :: R
@@ -113,10 +113,12 @@ calata q ys x = case calata' q ys x of
 make n = fromList n `fmap` runT (handT n)
 
 main = do
-	(c:r:p:_) <- getArgs
+	(c:p:_) <- getArgs
 	h <- make (read c)
+	putStrLn "----- Dotazione --------------"
 	print (toList h)
-	putStrLn "----"
-	let t = intable h
-	mapM_ (print . toList)  $ calata (simpleQ (read p),case r of "all" -> simpleR; "table" -> tavoloR) giochi h
+	putStrLn "----- Giochi generici --------"
+	mapM_ (print . toList)  $ calata (simpleQ (read p),simpleR) giochi h
+	putStrLn "----- Giochi realizzabili ----"
+	mapM_ (print . toList)  $ calata (simpleQ (read p),tavoloR) giochi h
 		

@@ -15,7 +15,7 @@ import System.Random
 
 
 -- | Valore di una carta di un qualunque seme. 
-newtype Rank = Rank Int deriving (Read,Ord,Eq,Num, Enum,NFData)
+newtype Rank = Rank Int deriving (Read,Ord,Eq,Num, Enum,NFData,Integral,Real)
 
 instance Show Rank where
 	show (Rank x) 
@@ -46,7 +46,8 @@ instance Show Card where
 		| otherwise = show x ++ show y
 
 
-
+mkCard :: Rank -> Suite -> Card
+mkCard r s = Card (((r - 1) `mod` 13) + 1, s) 
 -- | Nel burraco una combinazione di carte al tavolo puo contenere solo una matta. Siccome le matte comprendono le pinelle e le pinelle sono anche carte normali, e' necessario ricordarsi se si trovano in una scala del loro stesso seme. PSA tiene conto delle matte nelle scale
 data PSA 	
 	-- | La scala contiene la matta all'interno della scala. Il suo valore e' definito
@@ -102,7 +103,7 @@ isJP :: Card -> Bool
 isJP = liftM2 (||) (ranked 2) (ranked (-20))
 
 deck :: [Card]
-deck = concat . replicate 2 $ [Card (i,Suite j) | i <- [1..13] , j <- [0..3]] ++ replicate 4 jolly
+deck = concat . replicate 2 $ [Card (i,Suite j) | i <- [1..13] , j <- [0..3]] ++ replicate 2 jolly
 
 pickT = do
 	rs <- get
@@ -113,4 +114,5 @@ pickT = do
 handT n  = replicateM n pickT
 
 runT f = evalStateT f deck
+
 
