@@ -1,4 +1,5 @@
-
+calata:
+	ghc --make -O2 -threaded Calata.hs
 clean:
 	rm -f *.o 
 	rm -f *.hi

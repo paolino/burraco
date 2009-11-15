@@ -95,6 +95,8 @@ ranked n = (==) n . fst . unCard
 suited :: Suite -> Card -> Bool
 suited s = (==) s . snd . unCard
 
+suitedlike :: Card -> Card -> Bool
+suitedlike (Card (_,s1)) (Card (_,s2)) = s1 == s2
 -- | controlla se una carta e' un jolly o una pinella
 isJP :: Card -> Bool
 isJP = liftM2 (||) (ranked 2) (ranked (-20))

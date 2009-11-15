@@ -26,7 +26,7 @@ import System.Random
 
 
 ---------------------------
-data GState g v = GState {env::v , game::g}
+data GState g v = GState {env::v , game::g} deriving Show
 
 instance NFData g => NFData (GState g v) where
 	rnf (GState v g) = (rnf g) `seq` ()
@@ -43,7 +43,7 @@ instance Ord g => Ord (GState g v) where
 class Consumabile h  where
 	subStates :: h -> [h]
 
-data Result a = R a | N a | E a 
+data Result a = R a | N a | E a  deriving Show
 
 class (Eq g, Eq h, Ord g, Ord h, NFData g, NFData h, Consumabile h) => CG g h v | g -> v, g -> h where
 	attach :: GState g v -> h -> [Result (h, GState g v)]
@@ -72,6 +72,8 @@ sviluppo =  do
 	(exit,stay) <- line `fmap` get
 	put stay
 	tell exit
+
+runN h n b =  run (replicateM_ n sviluppo) $ (h,[b])
 
 run :: CG g h v =>  WriterT [Node g h v] (State [Node g h v]) () -> Node g h v -> ([Node g h v], [Node g h v])
 run k x =  first snd . flip runState [x] . runWriterT $ k
@@ -176,28 +178,4 @@ instance CG Combination [Card] [Card] where
 
 
 
------------------ tests -------------------------------
 
-deck :: [Card]
-deck = concat . replicate 2 $ [Card (i,Suite j) | i <- [1..13] , j <- [0..3]] ++ replicate 4 jolly
-
-pickT = do
-	rs <- get
-	n <- (`mod` length rs) `fmap` lift randomIO
-	put $ take n rs ++ drop (n + 1) rs
-	return $ rs !! n
-
-handT n  = replicateM n pickT
-
-runT f = evalStateT f deck
-main = do
-	r:_ <- getArgs
-	h0 <- runT $ handT (read r) 
-	print h0
-	mapM_ print . map (second $ map env) $ solutions (h0,[GState [] Tavolo, GState [] Scarto ])
-{-
-main' = do
-	h:_ <- getArgs
-	let 	h0 = map (Card . (Rank *** Suite)) $ read h :: Hand
-	mapM_ print . map (second $ map game) . snd . run (sviluppo) $ (h0,[GState [] Tavolo, GState [] Scarto ])
--}
