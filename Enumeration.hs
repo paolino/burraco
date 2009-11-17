@@ -1,6 +1,5 @@
-{-# LANGUAGE NoMonomorphismRestriction, FunctionalDependencies , MultiParamTypeClasses #-}
-{-# LANGUAGE NoMonomorphismRestriction, MultiParamTypeClasses, GeneralizedNewtypeDeriving, FlexibleInstances, TypeSynonymInstances #-}
-
+{-# LANGUAGE NoMonomorphismRestriction, FunctionalDependencies, MultiParamTypeClasses, GeneralizedNewtypeDeriving, FlexibleInstances, TypeSynonymInstances #-}
+module Enumeration where
 
 import Data.List (delete,partition,group,sort,cycle,tails)
 import Data.Either (partitionEithers)
@@ -23,6 +22,43 @@ import Debug.Trace
 import Control.Monad.State
 import System.Environment
 import System.Random
+
+-- | Nel burraco una combinazione di carte al tavolo puo contenere solo una matta. Siccome le matte comprendono le pinelle e le pinelle sono anche carte normali, e' necessario ricordarsi se si trovano in una scala del loro stesso seme. PSA tiene conto delle matte nelle scale
+data PSA 	
+	-- | La scala contiene la matta all'interno della scala. Il suo valore e' definito
+	= Piazzato 
+		Rank	-- ^ che valore all'interno della scala occupa la matta  
+		Bool  	-- ^ se la matta ha lo stesso seme della scala
+	-- | La scala ha una matta all'esterno . Il suo valore e' potenziale tra sotto la minima e sopra la massima
+	| Spiazzato 
+		Bool 	-- ^ se la matta ha lo stesso seme della scala
+	-- | La scala non ha matte associate
+	| Assente deriving (Show,Eq,Ord,Read)
+-- | Una combinazione di carte valide per stare sul tavolo del burraco
+data Combination 
+	-- | Un insieme di carte dello stesso valore
+	= Tris 
+		Rank 	-- ^ Il valore comune alle carte del tris
+		Bool	-- ^ Indica se il tris contiene una matta
+	-- | Un insieme di carte in sequenza e dello stesso seme
+	| Scala 
+		Suite 	-- ^ Il seme comune alle carte della sequenza
+		PSA 	-- ^ Il tipo di piazzamento della eventuale matta
+		(Rank,Rank)	-- ^ Il valore della prima carta e dell'ultima della sequenza
+	-- | Il tavolo, inteso come la combinazione virtuale alla quale si possono attaccare le combinazioni di partenza
+	| Tavolo
+	-- | Il monte degli scarti, inteso come la combinazione virtuale che accetta una carta qualsiasi
+	| Scarto deriving (Eq,Ord,Show,Read)
+
+instance NFData Combination where
+	rnf (Tris r j) = (rnf r) `seq` (rnf j) `seq` ()
+	rnf (Scala s p d) = (rnf s) `seq` (rnf p) `seq` (rnf d) `seq` ()
+	rnf _ = ()
+
+instance NFData PSA where
+	rnf (Piazzato r c) = rnf r `seq` rnf c `seq` ()
+	rnf (Spiazzato t) = rnf t `seq` ()
+	rnf _ = ()
 
 
 ---------------------------
