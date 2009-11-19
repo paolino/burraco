@@ -1,23 +1,13 @@
 {-# LANGUAGE NoMonomorphismRestriction, MultiParamTypeClasses, GeneralizedNewtypeDeriving, FlexibleInstances, TypeSynonymInstances #-}
-module Burraco where
+module Contesto where
 
---import Control.Arrow (first, second, (&&&))
---import Data.List (delete, group, sort)
---import Data.Function (on)
-import Control.Monad (liftM2)
-import Control.Monad.Reader (ReaderT, runReaderT, MonadReader, ask , local)
-import Test.QuickCheck
---import Data.Either (lefts)
---import Data.Char (chr)
-import Control.Parallel.Strategies (NFData)
-import Card
-import Game
-import Bag
-import Control.Monad.State
-import Debug.Trace
-
-
-	
+import Control.Monad (sequence)
+import Control.Monad.Reader (ReaderT, MonadReader, lift)
+import Card (Card,deck)
+import Game (Cards, giocoGen)
+import Bag (size, isSubsetOf, intersection, unions, difference, subsetGen1, subsetGen, fromList, toList)
+import Control.Monad.State (evalStateT, StateT, get, put)
+import Test.QuickCheck (elements, suchThat, listOf1, Testable (..), Gen, Arbitrary (..) , sized, resize , quickCheck)
 
 data Contesto = Contesto {
 	dotazione :: (Cards,(Cards,Int)), -- la propria dotazione accoppiata con la conoscenza parziale che l'avversario ha
@@ -28,12 +18,9 @@ data Contesto = Contesto {
 	pozzetto :: Bool, -- se abbiamo preso il pozzetto
 	pozzettoAvversario :: Bool, -- se l'avversario ha preso il pozzetto
 	tallone :: Int -- le carte rimaste nel tallone (questa e' deducibile, quindi un codice di controllo integrità)
-	} deriving Show
+	} deriving (Show,Read)
 
 newtype Contestuale m a = Contestuale (ReaderT Contesto m a)  deriving (Monad, MonadReader Contesto,Functor)
-
-
-
 
 -- regole di validita' per un contesto
 -- 1) la somma del numero di carte in dotazione, dotazioneAvversario,banco,bancoAvversario,tallone e 11*pozzetto, 11*pozzettoAvversario deve essere 108
@@ -41,10 +28,10 @@ newtype Contestuale m a = Contestuale (ReaderT Contesto m a)  deriving (Monad, M
 -- 3) i giochi dei due banchi devono essere validi
 -- 4) il giocatore che non ha preso il  pozzetto deve avere almeno 11 carte tra la sua dotazione ed il suo banco
 -- 5) il giocatore che ha preso il pozzetto deve avere almeno 22 carte tra la sua dotazione ed il suo banco delle quali 11 devono essere nel banco
--- 6) se un giocatore ha dotazione nulla, almeno 22 carte devono essere nel duo banco e la testa del monte degli scarti non deve essere una matta e l'avversario non puo' avere dotazione nulla
+-- 6) se un giocatore ha dotazione nulla, almeno 22 carte devono essere nel suo banco e la testa del monte degli scarti non deve essere una matta e l'avversario non puo' avere dotazione nulla
 -- inoltre data la aggiunta delle conoscenze parziali
 -------------------------------------- proprieta' dei contesti -------------------
-prop_somma (Contesto (d,_) (pda,lupda) b ba (ms,_) p pa t) = collect (length b) $ 108 ==  sum [
+prop_somma (Contesto (d,_) (pda,lupda) b ba (ms,_) p pa t) = 108 ==  sum [
 	size d, size pda, lupda, size (unions b), size (unions ba), size ms, t]
 
 prop_unione (Contesto (d,_) (pda,_) b ba (ms,_) _ _ _) = let i = unions ([d] ++ [pda] ++ b ++ ba) in intersection i (fromList deck) == i
@@ -61,6 +48,9 @@ prop_dotazioneNa (Contesto _ (pda,n) _ ba _ _ pa _ ) = let
 	in if not pa then 
 		s > 10
 		else s > 21 && u > 10	
+
+instance Testable Contesto where
+	property = property . and . sequence [prop_somma, prop_unione, prop_dotazioneN, prop_dotazioneNa]
 --------------------------------------------------------------------------------
 type WithDeck = StateT Cards Gen
 
@@ -71,9 +61,11 @@ picking f = do
 	put $ difference deck d
 	return x
 
+resize' f g =  sized $ \n -> resize (f n) g  
+
 bancoGen :: Bool -> Int -> WithDeck [Cards]
 bancoGen t l = picking $ \deck -> do
-	bs <- sized $ \n -> resize (floor (sqrt $ fromIntegral n)) $ listOf1 (giocoGen `suchThat` ((>2) . size)) `suchThat` k deck
+	bs <- resize' (floor . sqrt . fromIntegral) $ listOf1 (giocoGen `suchThat` ((>2) . size)) `suchThat` k deck
 	return (bs, unions bs)	
 	where k deck gs = 
 		let 	ugs = unions gs 
@@ -85,7 +77,7 @@ bancoGen t l = picking $ \deck -> do
 	
 dotazioneGen :: Bool -> [Cards] -> Int -> WithDeck (Cards,Cards,Int)
 dotazioneGen t b l = picking $ \deck -> do
-	d <- subsetGen deck `suchThat` k 	
+	d <- subsetGen1 deck `suchThat` k 	
 	pd <- subsetGen d
 	return ((d,pd,size d - size pd),d)
 	where k g = and [
@@ -95,7 +87,7 @@ dotazioneGen t b l = picking $ \deck -> do
 		]
 scartiGen :: WithDeck (Cards,Card)
 scartiGen = picking $ \deck -> do 
-	ms <- subsetGen deck
+	ms <- subsetGen1 deck
 	hms <- elements $ toList ms
 	return ((ms,hms), ms)
 
@@ -112,12 +104,7 @@ instance Arbitrary Contesto where
 		t <- size `fmap` get
 		return (Contesto (d,(pd,pdi)) (pda,pdai) b ba ms po poa t)		 
 
+main = quickCheck (arbitrary :: Gen Contesto)
 
-
-newtype Value = Value Double deriving (Eq,Show,Num,NFData)
-mkValue = Value . press
-	where press x = (pi/2 + atan x)/pi
-
-type Feature = [(Cards, Value)]
 
 

@@ -12,7 +12,8 @@ module Bag (
 	union,
 	unions,
 	isSubsetOf,
-	subsetGen
+	subsetGen,
+	subsetGen1
 	)
 	where
 
@@ -23,7 +24,7 @@ import Data.List (sort, delete)
 -------------- library for a set of cards ----------------------------------
 
 -- | generic set with support for element molteplicity
-newtype Bag a = Bag (Int,[a]) deriving (NFData, Show, Eq, Ord)
+newtype Bag a = Bag (Int,[a]) deriving (NFData, Show, Eq, Ord, Read)
 
 unsafeCons :: a -> Bag a -> Bag a
 unsafeCons x (Bag (i,xs)) = Bag (i + 1, x : xs)
@@ -90,7 +91,7 @@ sizedGen :: (Ord a , Arbitrary a) => Int -> Gen (Bag a)
 sizedGen n = fromList `fmap` vectorOf n arbitrary
 
 subsetGen x = do
-	n <- elements [1 .. size x]
+	n <- elements [0 .. size x]
 	fromList `fmap` subset (toList x) n
 	where
 	subset x 0 = return []
@@ -98,7 +99,7 @@ subsetGen x = do
 		r <- elements x
 		rs <- subset (delete r x) (n -1)
 		return $ r:rs
-
+subsetGen1 x = subsetGen x `suchThat` (not . empty)
 type BI = Bag Int
 prop_coherent (Bag (i,x)) = length x == i && sort x == x
 
