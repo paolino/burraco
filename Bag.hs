@@ -10,7 +10,8 @@ module Bag (
 	difference,
 	intersection,
 	union,
-	unions
+	unions,
+	sizedGen
 	)
 	where
 
@@ -81,11 +82,11 @@ unions x = foldr1 union x
 -------------- Test -------------------------------------
 
 instance (Ord a, Arbitrary a) => Arbitrary (Bag a) where
-	arbitrary = fromList `fmap` listOf arbitrary
-
-
+	arbitrary = fromList `fmap` arbitrary
+sizedGen :: (Ord a , Arbitrary a) => Int -> Gen (Bag a)
+sizedGen n = fromList `fmap` vectorOf n arbitrary
 type BI = Bag Int
-prop_coherent (Bag (i,x) :: BI) = length x == i && sort x == x
+prop_coherent (Bag (i,x)) = length x == i && sort x == x
 
 prop_unionSL (x :: BI)  y= prop_coherent $ union x y 
 
@@ -99,10 +100,12 @@ prop_difference2isempty (x::BI) = empty $ difference x x
 
 prop_uniondifferenceintersection (x::BI) y =  let z = x `union` y in 
 	z == union (difference z y) (intersection z y)
+instance Ord a => Testable (Bag a) where
+	property x = property $ prop_coherent x
 
 main = do
 	print "Bag tests............"
-	quickCheck prop_coherent
+	quickCheck (prop_coherent :: Bag Int -> Bool)
 	quickCheck prop_unionSL
 	quickCheck prop_intersectionSL
 	quickCheck prop_differenceSL

@@ -12,10 +12,10 @@ import Test.QuickCheck (Arbitrary(..), elements)
 import Control.Parallel.Strategies (NFData, rnf)
 import Control.Monad.State (lift, evalStateT, StateT, put, get)
 import System.Random (randomIO)
-
-
+import qualified Text.ParserCombinators.ReadP as P
+import Debug.Trace
 -- | Valore di una carta di un qualunque seme. 
-newtype Rank = Rank Int deriving (Read,Ord,Eq,Num, Enum,NFData,Integral,Real,Arbitrary)
+newtype Rank = Rank Int deriving (Ord,Eq,Num, Enum,NFData,Integral,Real,Arbitrary)
 
 instance Show Rank where
 	show (Rank x) 
@@ -25,8 +25,24 @@ instance Show Rank where
 		| x == 11 = "J"
 		| x == 14 = "A"
 		| otherwise = show $ x
+
+instance Read Rank where
+	readsPrec _  = P.readP_to_S $ do
+		let 	l = do
+				y <- P.get  
+				case y of
+					'A' -> return 1
+					'Q' -> return 12
+					'K' -> return 13
+					'J' -> return 11
+					_ -> P.pfail 
+			n = 	do 
+				n <- P.readS_to_P reads
+				if n > 1 && n < 11 then return (Rank n) 
+					else P.pfail
+		l P.+++ n
 -- | Seme di una carta.
-newtype Suite = Suite Int deriving (Read,Ord,Eq,Num,NFData, Enum,Arbitrary)
+newtype Suite = Suite Int deriving (Ord,Eq,Num,NFData, Enum,Arbitrary)
 
 instance Show Suite where
 	show (Suite y) 
@@ -35,13 +51,29 @@ instance Show Suite where
 		| y == 2 = "F"
 		| y == 3 = "P"
 
+instance Read Suite where
+	readsPrec _  = P.readP_to_S $ do
+		y <- P.get  
+		case y of
+			'C' -> return 0
+			'Q' -> return 1
+			'F' -> return 2
+			'P' -> return 3
+			_ -> P.pfail
+				 
+
 -- | Una carta contiene il suo valore ed il suo seme.I  jolly sono definiti con valore -20 sia per il seme che per il valore
-newtype Card = Card {unCard :: (Rank, Suite)} deriving (Read,Eq, Ord,NFData)
+newtype Card = Card {unCard :: (Rank, Suite)} deriving (Eq, Ord,NFData)
 
 instance Arbitrary Card where
 	arbitrary = elements deck
 		
-
+instance Read Card where
+	readsPrec _  = P.readP_to_S $ do  
+		r <- P.readS_to_P reads
+		s <- P.readS_to_P reads
+		return (Card (r,s))
+		
 
 instance Show Card where
 	show (Card (x,y)) 
