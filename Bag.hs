@@ -11,13 +11,14 @@ module Bag (
 	intersection,
 	union,
 	unions,
-	sizedGen
+	isSubsetOf,
+	subsetGen
 	)
 	where
 
 import Test.QuickCheck 
 import Control.Parallel.Strategies (NFData)
-import Data.List (sort)
+import Data.List (sort, delete)
 
 -------------- library for a set of cards ----------------------------------
 
@@ -79,12 +80,25 @@ unions :: Ord a => [Bag a] -> Bag a
 unions [] = error "Bag:unions of no sets"
 unions x = foldr1 union x
 
+isSubsetOf :: Ord a => Bag a -> Bag a -> Bool
+x `isSubsetOf` y = x == intersection x y 
 -------------- Test -------------------------------------
 
 instance (Ord a, Arbitrary a) => Arbitrary (Bag a) where
 	arbitrary = fromList `fmap` arbitrary
 sizedGen :: (Ord a , Arbitrary a) => Int -> Gen (Bag a)
 sizedGen n = fromList `fmap` vectorOf n arbitrary
+
+subsetGen x = do
+	n <- elements [1 .. size x]
+	fromList `fmap` subset (toList x) n
+	where
+	subset x 0 = return []
+	subset x n = do 
+		r <- elements x
+		rs <- subset (delete r x) (n -1)
+		return $ r:rs
+
 type BI = Bag Int
 prop_coherent (Bag (i,x)) = length x == i && sort x == x
 

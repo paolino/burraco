@@ -12,8 +12,9 @@ import Test.QuickCheck
 import Control.Parallel.Strategies (NFData)
 import Card
 import Game
+import Bag
 import Control.Monad.State
---import Debug.Trace
+import Debug.Trace
 
 
 	
@@ -27,7 +28,7 @@ data Contesto = Contesto {
 	pozzetto :: Bool, -- se abbiamo preso il pozzetto
 	pozzettoAvversario :: Bool, -- se l'avversario ha preso il pozzetto
 	tallone :: Int -- le carte rimaste nel tallone (questa e' deducibile, quindi un codice di controllo integrità)
-	}
+	} deriving Show
 
 newtype Contestuale m a = Contestuale (ReaderT Contesto m a)  deriving (Monad, MonadReader Contesto,Functor)
 
@@ -42,33 +43,74 @@ newtype Contestuale m a = Contestuale (ReaderT Contesto m a)  deriving (Monad, M
 -- 5) il giocatore che ha preso il pozzetto deve avere almeno 22 carte tra la sua dotazione ed il suo banco delle quali 11 devono essere nel banco
 -- 6) se un giocatore ha dotazione nulla, almeno 22 carte devono essere nel duo banco e la testa del monte degli scarti non deve essere una matta e l'avversario non puo' avere dotazione nulla
 -- inoltre data la aggiunta delle conoscenze parziali
--- 7) la conoscenza parziale che l'avversario ha di noi deve essere un sott'insieme della nostra dotazione
+-------------------------------------- proprieta' dei contesti -------------------
+prop_somma (Contesto (d,_) (pda,lupda) b ba (ms,_) p pa t) = collect (length b) $ 108 ==  sum [
+	size d, size pda, lupda, size (unions b), size (unions ba), size ms, t]
 
-prop_somma (Contesto (d,_) (pda,lupda) b ba (ms,_) p pa t) = 108 == sum [
-	size d, size pda, lupda, size b, size ba, size ms, 
-	t, if p then 0 else 11, if pa then 0 else 11]
+prop_unione (Contesto (d,_) (pda,_) b ba (ms,_) _ _ _) = let i = unions ([d] ++ [pda] ++ b ++ ba) in intersection i (fromList deck) == i
 
-prop_unione (Contesto (d,_) (pda,_) b ba (ms,_) _ _ _) = let i = unions [d,pda,b,ba] in intersection i (fromList deck) == i
+prop_dotazioneN (Contesto (d,_) _ b _ _ p _ _ ) = let 
+	u = size $ unions b 
+	s = u + size d
+	in if not p then 
+		s > 10
+		else s > 21 && u > 10	
+prop_dotazioneNa (Contesto _ (pda,n) _ ba _ _ pa _ ) = let 
+	u = size $ unions ba 
+	s = u + size pda + n
+	in if not pa then 
+		s > 10
+		else s > 21 && u > 10	
+--------------------------------------------------------------------------------
+type WithDeck = StateT Cards Gen
 
-prop_tris = 
-valid g d = 
-genGioco matta = do
+picking :: (Cards -> Gen (a,Cards)) -> WithDeck a
+picking f = do
 	deck <- get
+	(x,d) <- lift $ f deck
+	put $ difference deck d
+	return x
+
+bancoGen :: Bool -> Int -> WithDeck [Cards]
+bancoGen t l = picking $ \deck -> do
+	bs <- sized $ \n -> resize (floor (sqrt $ fromIntegral n)) $ listOf1 (giocoGen `suchThat` ((>2) . size)) `suchThat` k deck
+	return (bs, unions bs)	
+	where k deck gs = 
+		let 	ugs = unions gs 
+			s = size ugs 
+		in and [
+			s > if t then 10 else 0,
+			s < l,
+			ugs `isSubsetOf` deck]
 	
-	suchThat arbitrary (size (intersection 
-		
+dotazioneGen :: Bool -> [Cards] -> Int -> WithDeck (Cards,Cards,Int)
+dotazioneGen t b l = picking $ \deck -> do
+	d <- subsetGen deck `suchThat` k 	
+	pd <- subsetGen d
+	return ((d,pd,size d - size pd),d)
+	where k g = and [
+		size g < l,
+		if t then size g + size (unions b) > 21 
+				else size g > 10
+		]
+scartiGen :: WithDeck (Cards,Card)
+scartiGen = picking $ \deck -> do 
+	ms <- subsetGen deck
+	hms <- elements $ toList ms
+	return ((ms,hms), ms)
+
 
 instance Arbitrary Contesto where
-	arbirary = flip evalStateT (fromList deck) $ do
+	arbitrary = flip evalStateT (fromList deck) $ do
 		po <- lift $ elements [False,True]
 		poa <- lift $ elements [False,True]
-		
-		case
-		-- banchi .. semplice
-		-- monteScarti , fondamentalmente un ammasso di carte qualsiasi, non troppo grande , un po lontane dalle dotazioni, molto lontane dai banchi 
-		-- tallone è il resto
-
-	
+		b <- bancoGen po 40 
+		ba <- bancoGen poa 40
+		(d,pd,pdi) <-  dotazioneGen po b 30
+		(_,pda,pdai) <- dotazioneGen poa ba 30
+		ms <- scartiGen
+		t <- size `fmap` get
+		return (Contesto (d,(pd,pdi)) (pda,pdai) b ba ms po poa t)		 
 
 
 

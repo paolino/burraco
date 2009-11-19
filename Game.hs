@@ -4,6 +4,8 @@
 module Game (
 	giochi,
 	Cards ,
+	powerset, 
+	giocoGen
 	)
 	where
 
@@ -66,33 +68,14 @@ setHoleds = S.union setGiochi . S.fromList $ do
 jollies :: Cards -> Cards
 jollies = fromList . filter isJP . toList 
 
-------------------  Test --------------------
-instance Arbitrary Gioco where
-	arbitrary = do
-		t <- elements [False,True]
-		case t of 
-			True -> do 
-				c1 <- elements [1..14]
-				c2 <- elements [c1.. 14]
-				s <- elements [0..3] 
-				return . Scala . map (flip mkCard s) $ [c1 .. c2] 
-			False -> do
-				s <- elements $ tail $ powerset [0,0,1,1,2,2,3,3]
-				r <- elements $ [1] ++ [3..13]
-				return . Tris . map (mkCard r) $ s
 
-data Gioco = Scala {unGioco :: [Card]} | Tris {unGioco :: [Card]} deriving Show
-
-------------------------------------------------------
-
-sottoinsiemeDelMazzo deck ugs = intersection ugs deck == ugs
 
 deckBag = fromList deck
 
 
-gen_gioco_valido_al_tavolo :: Gen Cards
-gen_gioco_valido_al_tavolo = do
-	g <- elements . filter ((>2) . size) $ S.toList setGiochi 
+giocoGen :: Gen Cards
+giocoGen = do
+	g <- elements . S.toList $ setGiochi 
 	j <- elements $ [False,True]
 	if j then do
 		let cs = toList g
@@ -102,19 +85,7 @@ gen_gioco_valido_al_tavolo = do
 		else return g
 	
 
-
-gen_giochi_validi_al_tavolo :: Cards -> Int -> Gen [Cards]
-gen_giochi_validi_al_tavolo d t = 
-	listOf1 gen_gioco_valido_al_tavolo `suchThat` 
-		(\gs -> let ugs = unions gs in size ugs > t && sottoinsiemeDelMazzo d ugs) 
-		
-gen_giochi_validi_al_tavolo_2 :: Bool -> Bool -> Gen ([Cards],[Cards])
-gen_giochi_validi_al_tavolo_2 t1 t2  = do
-	u1 <- gen_giochi_validi_al_tavolo deckBag $ if t1 then 10 else 0
-	u2 <- gen_giochi_validi_al_tavolo (difference deckBag (unions u1)) $ if t2 then 10 else 0
-	return (u1,u2)	
  
 main = do 	print "Testing Giochi ..............."
-		quickCheckWith stdArgs {maxSuccess = 10000} (\cs -> fromList (unGioco cs) `elem` giochi) 
-		quickCheck gen_gioco_valido_al_tavolo
+		
 		
