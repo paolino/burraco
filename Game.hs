@@ -5,16 +5,18 @@ module Game (
 	giochi,
 	Cards ,
 	powerset, 
-	giocoGen
+	giocoGen,
+	valid
 	)
 	where
 
 import Card
 import Test.QuickCheck 
 import Control.Parallel.Strategies (NFData)
-import Data.List (sort, group, delete)
+import Data.List (sort, group, delete, partition)
 import Control.Concurrent
 import Control.Monad.State
+import Control.Arrow ((&&&),(***))
 import qualified Data.Set as S (Set,toList, fromList, member, union)
 import qualified Enumeration as E
 import Bag 
@@ -68,14 +70,18 @@ setHoleds = S.union setGiochi . S.fromList $ do
 jollies :: Cards -> Cards
 jollies = fromList . filter isJP . toList 
 
+valid g = g `S.member` setGiochi || (z `S.member` setHoleds && size jps == 1) where
+	z = difference g jps
+	jps = jollies g
 
 
-deckBag = fromList deck
+----------------------------- Test stuff ----------------------------------
 
 
+-- | genera un gioco valido , possibilmente sporco da una matta
 giocoGen :: Gen Cards
 giocoGen = do
-	g <- elements . S.toList $ setGiochi 
+	g <- elements . S.toList $ setGiochi
 	j <- elements $ [False,True]
 	if j then do
 		let cs = toList g
@@ -83,7 +89,19 @@ giocoGen = do
 		j <- elements $ filter isJP $ deck
 		return $ insertion j (fromList $ delete c cs)
 		else return g
-	
+
+-- | genera un gioco valido , fattibile con un insieme di carte
+giocoVGen :: Cards -> Gen Cards
+giocoVGen x = let
+	is = filter (\(i,g) -> size g - size i < 2) . map (intersection x &&& id) $ giochi 
+	(cs,c1s) = partition (\(i,g) -> size g == size i) is
+	rs = map Left cs ++ 
+		(map Right . filter (not . empty . snd . snd) . map (id *** (id &&& (jollies . difference x))) $ c1s)	
+	in do
+		y <- elements rs
+		case y of
+			Right (i,(g,jsp)) -> flip insertion i `fmap` elements (toList jsp)
+			Left (g,_) -> return g
 
  
 main = do 	print "Testing Giochi ..............."

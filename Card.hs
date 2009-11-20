@@ -8,12 +8,14 @@ import Data.Function (on)
 import Control.Monad (liftM2, replicateM)
 import Data.Either (lefts)
 import Data.Char (chr)
-import Test.QuickCheck (Arbitrary(..), elements)
+import Test.QuickCheck (Arbitrary(..), elements, quickCheck)
 import Control.Parallel.Strategies (NFData, rnf)
 import Control.Monad.State (lift, evalStateT, StateT, put, get)
 import System.Random (randomIO)
+
 import qualified Text.ParserCombinators.ReadP as P
-import Debug.Trace
+
+
 -- | Valore di una carta di un qualunque seme. 
 newtype Rank = Rank Int deriving (Ord,Eq,Num, Enum,NFData,Integral,Real,Arbitrary)
 
@@ -69,12 +71,16 @@ instance Arbitrary Card where
 	arbitrary = elements deck
 		
 instance Read Card where
-	readsPrec _  = P.readP_to_S $ do  
-		r <- P.readS_to_P reads
-		s <- P.readS_to_P reads
-		return (Card (r,s))
+	readsPrec _  = P.readP_to_S $ c P.+++ j  
+		where
+		c = do  
+			r <- P.readS_to_P reads
+			s <- P.readS_to_P reads
+			return (Card (r,s))
+		j = do
+			P.string "Jolly"
+			return jolly
 		
-
 instance Show Card where
 	show (Card (x,y)) 
 		| x == -20 = "Jolly"
@@ -130,4 +136,9 @@ handT n  = replicateM n pickT
 runT :: Pick a -> IO a
 runT f = evalStateT f deck
 
+------------------ Test Suite for Card --------------------------------
 
+main = do
+	putStrLn "testing Card .............."
+	putStrLn "\tShow <-> Read"
+	quickCheck (\x -> (x :: Card) == (read . show $ x))
